@@ -1,0 +1,44 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: servico-pedido
+
+  datasource:
+    url: jdbc:h2:mem:pedidodb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  rabbitmq:
+    host: jackal.rmq.cloudamqp.com
+    port: 5671
+    username: ktdyotmj
+    password: lMOCkDPn0_EXn3gMQc_yE1Oa3xsp2QpJ
+    virtual-host: ktdyotmj
+    ssl:
+      enabled: true
+
+app:
+  mensageria:
+    # false = nao usa RabbitMQ (os eventos so aparecem no log) -> da para testar o servicoPedido sozinho.
+    # true  = publica pedido-criado / pedido-cancelado / pedido-finalizado e escuta pedido-status-cozinha.
+    habilitada: "${MENSAGERIA_HABILITADA:false}"
+  jwt:
+    secret: "G7vQ2mX9kL4pN8sR1dF6wT3yH0cJ5zA8uE2bV7nM9qS4xK6rP1tW8yD3fL0gC5"
+  cardapio:
+    url: "${CARDAPIO_URL:http://localhost:8082}"
+  # origens do front end liberadas no CORS (separadas por virgula)
+  cors:
+    origins: "http://localhost:3000,http://localhost:4200,http://localhost:5173"
