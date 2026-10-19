@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.context.event.EventListener;
 
 import com.example.servicopedido.entity.AdicionalCardapio;
 import com.example.servicopedido.entity.FormaPagamento;
@@ -30,21 +32,33 @@ import com.example.servicopedido.entity.StatusPedido;
 import com.example.servicopedido.event.PedidoCanceladoEvent;
 import com.example.servicopedido.event.PedidoCriadoEvent;
 import com.example.servicopedido.event.PedidoFinalizadoEvent;
+import com.example.servicopedido.event.PedidoStatusAlteradoEvent;
 import com.example.servicopedido.exception.RegraDeNegocioException;
 import com.example.servicopedido.integration.CardapioIntegration;
-import com.example.servicopedido.messaging.PedidoEventPublisher;
 import com.example.servicopedido.repository.jpa.PedidoRepositoryWithJpa;
 
 // Teste de verdade: Spring + banco H2 + transacoes reais (igual ao LeilaoServiceTest do projeto antigo).
 // Varias threads disparam as mesmas operacoes AO MESMO TEMPO para provar que:
 //   - clique duplo / varios cliques em "pagar" criam UM pedido so (restricao unica + Idempotency-Key)
 //   - retirar duas vezes, ou cancelar na hora que a cozinha comeca, so deixa uma passar (lock no banco)
-// Nao precisa de servicoCardapio nem de RabbitMQ: o cardapio e os eventos sao substituidos por versoes de teste.
+// Nao precisa de servicoCardapio nem de RabbitMQ: o cardapio e trocado por uma versao de teste e os eventos so sao contados.
 @SpringBootTest(properties = "app.mensageria.habilitada=false")
 class PedidoConcorrenciaTest {
 
     @Autowired
-    private PedidoService service;
+    private CriarPedidoService criar;
+
+    @Autowired
+    private CancelarPedidoService cancelar;
+
+    @Autowired
+    private AtualizarStatusCozinhaService cozinha;
+
+    @Autowired
+    private RetirarPedidoService retirar;
+
+    @Autowired
+    private ConsultarPedidoService consultar;
 
     @Autowired
     private PedidoRepositoryWithJpa pedidosNoBanco;
@@ -56,16 +70,16 @@ class PedidoConcorrenciaTest {
 
     @Test
     void cincoCliquesAoMesmoTempoCriamUmSoPedido() throws Exception {
-        String cliente = novoCliente();
+        Long cliente = novoCliente();
         String chave = UUID.randomUUID().toString();
         int cliques = 5;
 
         List<ResultadoCriacao> resultados = emParalelo(cliques,
-                () -> service.criarPedido(cliente, chave, FormaPagamento.PIX, null, carrinho()));
+                () -> criar.criar(cliente, chave, FormaPagamento.PIX, null, carrinho()));
 
         long criados = resultados.stream().filter(r -> !r.repetido()).count();
         long idsDiferentes = resultados.stream().map(r -> r.pedido().id()).distinct().count();
-        int pedidosNoBancoDoCliente = pedidosNoBanco.findByClienteEmailOrderByCriadoEmDesc(cliente).size();
+        int pedidosNoBancoDoCliente = pedidosNoBanco.findByClienteIdOrderByCriadoEmDesc(cliente).size();
 
         System.out.println("====================================");
         System.out.println("Cliques simultaneos em PAGAR : " + cliques);
@@ -82,38 +96,38 @@ class PedidoConcorrenciaTest {
 
     @Test
     void segundoCliqueDepoisDoPrimeiroDevolveOMesmoPedido() {
-        String cliente = novoCliente();
+        Long cliente = novoCliente();
         String chave = UUID.randomUUID().toString();
 
-        ResultadoCriacao primeiro = service.criarPedido(cliente, chave, FormaPagamento.CREDITO, null, carrinho());
-        ResultadoCriacao segundo = service.criarPedido(cliente, chave, FormaPagamento.CREDITO, null, carrinho());
+        ResultadoCriacao primeiro = criar.criar(cliente, chave, FormaPagamento.CREDITO, null, carrinho());
+        ResultadoCriacao segundo = criar.criar(cliente, chave, FormaPagamento.CREDITO, null, carrinho());
 
         assertTrue(!primeiro.repetido());
         assertTrue(segundo.repetido());
         assertEquals(primeiro.pedido().id(), segundo.pedido().id());
         assertEquals(primeiro.pedido().senhaRetirada(), segundo.pedido().senhaRetirada());
-        assertEquals(1, pedidosNoBanco.findByClienteEmailOrderByCriadoEmDesc(cliente).size());
+        assertEquals(1, pedidosNoBanco.findByClienteIdOrderByCriadoEmDesc(cliente).size());
         assertEquals(1L, eventos.criadosDo(cliente));
     }
 
     @Test
     void comprasDiferentesComChavesDiferentesSaoDoisPedidos() {
-        String cliente = novoCliente();
+        Long cliente = novoCliente();
 
-        ResultadoCriacao a = service.criarPedido(cliente, UUID.randomUUID().toString(), FormaPagamento.PIX, null, carrinho());
-        ResultadoCriacao b = service.criarPedido(cliente, UUID.randomUUID().toString(), FormaPagamento.PIX, null, carrinho());
+        ResultadoCriacao a = criar.criar(cliente, UUID.randomUUID().toString(), FormaPagamento.PIX, null, carrinho());
+        ResultadoCriacao b = criar.criar(cliente, UUID.randomUUID().toString(), FormaPagamento.PIX, null, carrinho());
 
         assertTrue(!a.repetido() && !b.repetido());
         assertTrue(!a.pedido().id().equals(b.pedido().id()));
-        assertEquals(2, pedidosNoBanco.findByClienteEmailOrderByCriadoEmDesc(cliente).size());
+        assertEquals(2, pedidosNoBanco.findByClienteIdOrderByCriadoEmDesc(cliente).size());
     }
 
     @Test
     void mesmaChaveDeClientesDiferentesNaoConflita() {
         String chave = UUID.randomUUID().toString();
 
-        ResultadoCriacao ana = service.criarPedido(novoCliente(), chave, FormaPagamento.PIX, null, carrinho());
-        ResultadoCriacao bia = service.criarPedido(novoCliente(), chave, FormaPagamento.PIX, null, carrinho());
+        ResultadoCriacao ana = criar.criar(novoCliente(), chave, FormaPagamento.PIX, null, carrinho());
+        ResultadoCriacao bia = criar.criar(novoCliente(), chave, FormaPagamento.PIX, null, carrinho());
 
         assertTrue(!ana.repetido() && !bia.repetido());
         assertTrue(!ana.pedido().id().equals(bia.pedido().id()));
@@ -123,12 +137,12 @@ class PedidoConcorrenciaTest {
 
     @Test
     void retirarDuasVezesAoMesmoTempoSoUmaPassa() throws Exception {
-        String cliente = novoCliente();
+        Long cliente = novoCliente();
         Pedido pedido = pedidoPronto(cliente);
 
         List<String> respostas = emParalelo(2, () -> {
             try {
-                service.retirarPedido(pedido.id());
+                retirar.retirar(pedido.id());
                 return "RETIRADO";
             } catch (RegraDeNegocioException e) {
                 return "RECUSADO";
@@ -139,20 +153,21 @@ class PedidoConcorrenciaTest {
 
         assertEquals(1L, respostas.stream().filter("RETIRADO"::equals).count());
         assertEquals(1L, respostas.stream().filter("RECUSADO"::equals).count());
-        assertEquals(StatusPedido.RETIRADO, service.buscarPedido(pedido.id(), cliente, false).status());
+        assertEquals(StatusPedido.RETIRADO, consultar.buscar(pedido.id(), cliente, false).status());
         assertEquals(1L, eventos.finalizadosDo(pedido.id())); // a venda foi para o relatorio uma vez so
+        assertEquals(3L, eventos.statusAlteradosDo(pedido.id())); // EM_PREPARO, PRONTO e RETIRADO (o retirar recusado nao conta)
     }
 
     @Test
     void cancelarNaHoraQueACozinhaComecaSoUmVence() throws Exception {
-        String cliente = novoCliente();
-        Pedido pedido = service.criarPedido(cliente, UUID.randomUUID().toString(), FormaPagamento.DEBITO, null,
+        Long cliente = novoCliente();
+        Pedido pedido = criar.criar(cliente, UUID.randomUUID().toString(), FormaPagamento.DEBITO, null,
                 carrinho()).pedido();
 
         List<String> respostas = emParaleloVarios(List.of(
                 () -> {
                     try {
-                        service.cancelarPedido(pedido.id(), cliente, false);
+                        cancelar.cancelar(pedido.id(), cliente, false);
                         return "CANCELOU";
                     } catch (RegraDeNegocioException e) {
                         return "CANCELAMENTO_RECUSADO";
@@ -160,14 +175,14 @@ class PedidoConcorrenciaTest {
                 },
                 () -> {
                     try {
-                        service.atualizarStatusDaCozinha(pedido.id(), StatusPedido.EM_PREPARO);
+                        cozinha.atualizar(pedido.id(), StatusPedido.EM_PREPARO);
                         return "COZINHA_COMECOU";
                     } catch (RegraDeNegocioException e) {
                         return "COZINHA_RECUSADA";
                     }
                 }));
 
-        StatusPedido statusFinal = service.buscarPedido(pedido.id(), cliente, false).status();
+        StatusPedido statusFinal = consultar.buscar(pedido.id(), cliente, false).status();
         System.out.println("Cancelar x cozinha comecar -> " + respostas + " | status final: " + statusFinal);
 
         // exatamente um dos dois vence; nunca "cancelado e em preparo" ao mesmo tempo
@@ -179,16 +194,18 @@ class PedidoConcorrenciaTest {
 
     // ---------------------------------------------------------------- apoio
 
-    private Pedido pedidoPronto(String cliente) {
-        Pedido pedido = service.criarPedido(cliente, UUID.randomUUID().toString(), FormaPagamento.PIX, null,
+    private Pedido pedidoPronto(Long cliente) {
+        Pedido pedido = criar.criar(cliente, UUID.randomUUID().toString(), FormaPagamento.PIX, null,
                 carrinho()).pedido();
-        service.atualizarStatusDaCozinha(pedido.id(), StatusPedido.EM_PREPARO);
-        service.atualizarStatusDaCozinha(pedido.id(), StatusPedido.PRONTO);
+        cozinha.atualizar(pedido.id(), StatusPedido.EM_PREPARO);
+        cozinha.atualizar(pedido.id(), StatusPedido.PRONTO);
         return pedido;
     }
 
-    private static String novoCliente() {
-        return "cliente-" + UUID.randomUUID() + "@teste.com";
+    private static final AtomicLong PROXIMO_CLIENTE = new AtomicLong(1000);
+
+    private static Long novoCliente() {
+        return PROXIMO_CLIENTE.incrementAndGet();
     }
 
     private static List<ItemSolicitado> carrinho() {
@@ -256,39 +273,49 @@ class PedidoConcorrenciaTest {
         }
 
         @Bean
-        @Primary
         ContadorDeEventos contadorDeEventos() {
             return new ContadorDeEventos();
         }
     }
 
-    // em vez de mandar para o RabbitMQ, so conta quantos avisos saiam
-    static class ContadorDeEventos implements PedidoEventPublisher {
+    // Em vez de mandar para o RabbitMQ, so conta quantos eventos do Spring o dominio soltou.
+    // Isso testa o caminho de verdade: dominio -> PedidoEventPublisherSpring -> @EventListener.
+    static class ContadorDeEventos {
         private final List<PedidoCriadoEvent> criados = new CopyOnWriteArrayList<>();
         private final List<PedidoCanceladoEvent> cancelados = new CopyOnWriteArrayList<>();
         private final List<PedidoFinalizadoEvent> finalizados = new CopyOnWriteArrayList<>();
+        private final List<PedidoStatusAlteradoEvent> statusAlterados = new CopyOnWriteArrayList<>();
 
-        @Override
-        public void publicarPedidoCriado(PedidoCriadoEvent evento) {
+        @EventListener
+        public void aoCriar(PedidoCriadoEvent evento) {
             criados.add(evento);
         }
 
-        @Override
-        public void publicarPedidoCancelado(PedidoCanceladoEvent evento) {
+        @EventListener
+        public void aoCancelar(PedidoCanceladoEvent evento) {
             cancelados.add(evento);
         }
 
-        @Override
-        public void publicarPedidoFinalizado(PedidoFinalizadoEvent evento) {
+        @EventListener
+        public void aoFinalizar(PedidoFinalizadoEvent evento) {
             finalizados.add(evento);
         }
 
-        long criadosDo(String clienteEmail) {
-            return criados.stream().filter(e -> e.clienteEmail().equals(clienteEmail)).count();
+        @EventListener
+        public void aoMudarDeStatus(PedidoStatusAlteradoEvent evento) {
+            statusAlterados.add(evento);
+        }
+
+        long criadosDo(Long clienteId) {
+            return criados.stream().filter(e -> e.clienteId().equals(clienteId)).count();
         }
 
         long finalizadosDo(Long pedidoId) {
             return finalizados.stream().filter(e -> e.pedidoId().equals(pedidoId)).count();
+        }
+
+        long statusAlteradosDo(Long pedidoId) {
+            return statusAlterados.stream().filter(e -> e.pedidoId().equals(pedidoId)).count();
         }
     }
 }

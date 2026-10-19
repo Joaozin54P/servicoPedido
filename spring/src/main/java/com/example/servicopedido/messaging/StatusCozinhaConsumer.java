@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import com.example.servicopedido.config.RabbitMQConfig;
 import com.example.servicopedido.entity.StatusPedido;
 import com.example.servicopedido.messaging.dto.StatusCozinhaMessage;
-import com.example.servicopedido.service.PedidoService;
+import com.example.servicopedido.service.AtualizarStatusCozinhaService;
 
 // a cozinha avisa "comecei a preparar" / "ficou pronto" e o status do pedido muda aqui
 @ConditionalOnProperty(prefix = "app.mensageria", name = "habilitada", havingValue = "true")
@@ -18,17 +18,17 @@ public class StatusCozinhaConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(StatusCozinhaConsumer.class);
 
-    private final PedidoService pedidoService;
+    private final AtualizarStatusCozinhaService atualizarStatusCozinha;
 
-    public StatusCozinhaConsumer(PedidoService pedidoService) {
-        this.pedidoService = pedidoService;
+    public StatusCozinhaConsumer(AtualizarStatusCozinhaService atualizarStatusCozinha) {
+        this.atualizarStatusCozinha = atualizarStatusCozinha;
     }
 
     @RabbitListener(queues = RabbitMQConfig.FILA_STATUS_COZINHA)
     public void receber(StatusCozinhaMessage mensagem) {
         try {
             StatusPedido status = StatusPedido.valueOf(mensagem.status().trim().toUpperCase());
-            pedidoService.atualizarStatusDaCozinha(mensagem.pedidoId(), status);
+            atualizarStatusCozinha.atualizar(mensagem.pedidoId(), status);
             log.info("COZINHA -> pedido #{} agora esta {}", mensagem.pedidoId(), status);
         } catch (RuntimeException e) {
             // mensagem invalida ou transicao nao permitida: registra e descarta

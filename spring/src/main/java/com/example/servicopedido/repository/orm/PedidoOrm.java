@@ -26,15 +26,15 @@ import jakarta.persistence.UniqueConstraint;
 // restricao unica: o MESMO cliente nao pode ter dois pedidos com a mesma chave de idempotencia.
 // E o "lock" da criacao: mesmo com dois cliques simultaneos, o banco so deixa um gravar.
 @Table(name = "pedido", uniqueConstraints = @UniqueConstraint(
-        name = "uk_pedido_cliente_chave", columnNames = {"cliente_email", "chave_idempotencia"}))
+        name = "uk_pedido_cliente_chave", columnNames = {"cliente_id", "chave_idempotencia"}))
 public class PedidoOrm {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "cliente_email")
-    private String clienteEmail;
+    @Column(name = "cliente_id")
+    private Long clienteId;
 
     @Enumerated(EnumType.STRING)
     private StatusPedido status;
@@ -63,11 +63,11 @@ public class PedidoOrm {
     public PedidoOrm() {
     }
 
-    public PedidoOrm(Long id, String clienteEmail, StatusPedido status, List<ItemPedidoOrm> itens, BigDecimal total,
+    public PedidoOrm(Long id, Long clienteId, StatusPedido status, List<ItemPedidoOrm> itens, BigDecimal total,
                      FormaPagamento formaPagamento, String observacao, String senhaRetirada,
                      String chaveIdempotencia, LocalDateTime criadoEm, LocalDateTime atualizadoEm) {
         this.id = id;
-        this.clienteEmail = clienteEmail;
+        this.clienteId = clienteId;
         this.status = status;
         this.itens = new ArrayList<>(itens);
         this.total = total;
@@ -83,8 +83,8 @@ public class PedidoOrm {
         return id;
     }
 
-    public String getClienteEmail() {
-        return clienteEmail;
+    public Long getClienteId() {
+        return clienteId;
     }
 
     public StatusPedido getStatus() {

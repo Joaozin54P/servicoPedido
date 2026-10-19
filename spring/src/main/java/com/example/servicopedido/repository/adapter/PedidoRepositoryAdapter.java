@@ -21,7 +21,7 @@ public class PedidoRepositoryAdapter {
 
         return new Pedido(
                 orm.getId(),
-                orm.getClienteEmail(),
+                orm.getClienteId(),
                 orm.getStatus(),
                 itens,
                 orm.getTotal(),
@@ -40,7 +40,7 @@ public class PedidoRepositoryAdapter {
 
         return new PedidoOrm(
                 entity.id(),
-                entity.clienteEmail(),
+                entity.clienteId(),
                 entity.status(),
                 itens,
                 entity.total(),

@@ -17,6 +17,12 @@
 
     <!-- nenhuma dependencia do Spring aqui: so JUnit para os testes -->
     <dependencies>
+        <!-- Os services usam @Transactional; o runtime/implementacao da transacao
+             e fornecido pelo modulo Spring (spring-boot-starter-data-jpa). -->
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

@@ -7,7 +7,7 @@ import java.util.List;
 // JSON da fila "pedido-finalizado" (servicoRelatorio le)
 public record PedidoFinalizadoMessage(
         Long pedidoId,
-        String clienteEmail,
+        Long clienteId,
         BigDecimal total,
         String formaPagamento,
         LocalDateTime finalizadoEm,

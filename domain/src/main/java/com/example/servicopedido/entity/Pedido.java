@@ -6,7 +6,7 @@ import java.util.List;
 
 public record Pedido(
         Long id,
-        String clienteEmail,
+        Long clienteId,
         StatusPedido status,
         List<ItemPedido> itens,
         BigDecimal total,
@@ -19,12 +19,12 @@ public record Pedido(
 ) {
 
     public Pedido comStatus(StatusPedido novoStatus) {
-        return new Pedido(id, clienteEmail, novoStatus, itens, total, formaPagamento,
+        return new Pedido(id, clienteId, novoStatus, itens, total, formaPagamento,
                 observacao, senhaRetirada, chaveIdempotencia, criadoEm, LocalDateTime.now());
     }
 
     public Pedido comSenha(String senha) {
-        return new Pedido(id, clienteEmail, status, itens, total, formaPagamento,
+        return new Pedido(id, clienteId, status, itens, total, formaPagamento,
                 observacao, senha, chaveIdempotencia, criadoEm, atualizadoEm);
     }
 }

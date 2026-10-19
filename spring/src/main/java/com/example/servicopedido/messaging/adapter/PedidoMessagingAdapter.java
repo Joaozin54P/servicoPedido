@@ -16,7 +16,7 @@ public class PedidoMessagingAdapter {
         return new PedidoCriadoMessage(
                 evento.pedidoId(),
                 evento.senhaRetirada(),
-                evento.clienteEmail(),
+                evento.clienteId(),
                 evento.observacao(),
                 evento.criadoEm(),
                 evento.itens().stream()
@@ -32,7 +32,7 @@ public class PedidoMessagingAdapter {
     public static PedidoFinalizadoMessage castEvent(PedidoFinalizadoEvent evento) {
         return new PedidoFinalizadoMessage(
                 evento.pedidoId(),
-                evento.clienteEmail(),
+                evento.clienteId(),
                 evento.total(),
                 evento.formaPagamento(),
                 evento.finalizadoEm(),

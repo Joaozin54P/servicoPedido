@@ -30,7 +30,9 @@ public class JwtService {
                     .parseSignedClaims(token)
                     .getPayload();
 
-            return Optional.of(new UsuarioToken(claims.getSubject(), claims.get("role", String.class)));
+            // o "sub" do token e o ID do usuario. Token antigo (com e-mail no sub) nao vira numero e cai no catch: e recusado
+            Long id = Long.valueOf(claims.getSubject());
+            return Optional.of(new UsuarioToken(id, claims.get("role", String.class)));
         } catch (Exception e) {
             return Optional.empty();
         }

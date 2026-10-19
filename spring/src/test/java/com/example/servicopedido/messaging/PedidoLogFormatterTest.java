@@ -18,14 +18,14 @@ class PedidoLogFormatterTest {
 
     @Test
     void cupomFinalizadoMostraClienteItensETotalEmReais() {
-        PedidoFinalizadoEvent evento = new PedidoFinalizadoEvent(1L, "ana@x.com", new BigDecimal("1234.50"), "PIX",
+        PedidoFinalizadoEvent evento = new PedidoFinalizadoEvent(1L, 42L, new BigDecimal("1234.50"), "PIX",
                 LocalDateTime.of(2026, 10, 3, 11, 49, 57),
                 List.of(new PedidoFinalizadoEvent.Item(2L, "Burger Duplo", 1, new BigDecimal("32.90"))));
 
         String cupom = PedidoLogFormatter.finalizado(evento, PedidoLogFormatter.SO_NO_LOG);
 
         assertTrue(cupom.contains("PEDIDO FINALIZADO #1"));
-        assertTrue(cupom.contains("ana@x.com"));
+        assertTrue(cupom.contains("#42"));
         assertTrue(cupom.contains("03/10/2026 11:49:57"));
         assertTrue(cupom.contains("R$ 32,90"));
         assertTrue(cupom.contains("R$ 1.234,50"));
@@ -34,7 +34,7 @@ class PedidoLogFormatterTest {
 
     @Test
     void cupomDaCozinhaMostraAdicionaisEObservacaoSemPrecos() {
-        PedidoCriadoEvent evento = new PedidoCriadoEvent(7L, "007", "ana@x.com", "sem guardanapo",
+        PedidoCriadoEvent evento = new PedidoCriadoEvent(7L, "007", 42L, "sem guardanapo",
                 LocalDateTime.of(2026, 10, 3, 12, 0, 0),
                 List.of(new PedidoCriadoEvent.Item("Burger Bacon", 2, List.of("Bacon extra"), "sem cebola")));
 
@@ -52,7 +52,7 @@ class PedidoLogFormatterTest {
     @Test
     void nomeMuitoLongoNaoQuebraAColunaDosValores() {
         String nome = "Combo Familia Gigante com Batata Frita Grande e Refrigerante";
-        PedidoFinalizadoEvent evento = new PedidoFinalizadoEvent(2L, "ana@x.com", new BigDecimal("99.90"), "DINHEIRO",
+        PedidoFinalizadoEvent evento = new PedidoFinalizadoEvent(2L, 42L, new BigDecimal("99.90"), "DINHEIRO",
                 LocalDateTime.of(2026, 10, 3, 12, 0, 0),
                 List.of(new PedidoFinalizadoEvent.Item(9L, nome, 1, new BigDecimal("99.90"))));
 

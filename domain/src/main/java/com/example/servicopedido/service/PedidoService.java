@@ -47,7 +47,7 @@ public class PedidoService {
     // chaveIdempotencia: codigo unico POR PEDIDO, gerado pelo front quando o cliente abre o pagamento
     // (ex: um UUID). Se o cliente clicar duas vezes em "pagar", as duas requisicoes levam a MESMA chave:
     // so a primeira cria o pedido, a segunda recebe o pedido que ja existe (repetido = true).
-    public ResultadoCriacao criarPedido(String clienteEmail,
+    public ResultadoCriacao criarPedido(Long clienteId,
                                         String chaveIdempotencia,
                                         FormaPagamento formaPagamento,
                                         String observacao,
@@ -64,7 +64,7 @@ public class PedidoService {
         }
 
         // 1) segundo clique (ou retentativa depois de queda de rede): devolve o pedido que ja existe
-        Optional<Pedido> jaCriado = pedidoRepository.buscarPorClienteEChave(clienteEmail, chave);
+        Optional<Pedido> jaCriado = pedidoRepository.buscarPorClienteEChave(clienteId, chave);
         if (jaCriado.isPresent()) {
             return new ResultadoCriacao(jaCriado.get(), true);
         }
@@ -87,7 +87,7 @@ public class PedidoService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         LocalDateTime agora = LocalDateTime.now();
-        Pedido novo = new Pedido(null, clienteEmail, StatusPedido.CRIADO, itens, total,
+        Pedido novo = new Pedido(null, clienteId, StatusPedido.CRIADO, itens, total,
                 formaPagamento, observacao, null, chave, agora, agora);
 
         try {
@@ -98,7 +98,7 @@ public class PedidoService {
                 Pedido comSenha = pedidoRepository.salvar(
                         salvo.comSenha(String.format("%03d", salvo.id() % 1000)));
 
-                eventPublisher.publicarPedidoCriado(montarEventoCriado(comSenha));
+                eventPublisher.publicar(PedidoCriadoEvent.de(comSenha));
                 return comSenha;
             });
             return new ResultadoCriacao(criado, false);
@@ -107,21 +107,21 @@ public class PedidoService {
             // 2) DOIS cliques ao mesmo tempo: as duas passaram pela checagem acima, mas o banco
             // (restricao unica cliente+chave) deixou so uma gravar. A outra volta aqui e
             // devolve o pedido que ganhou a corrida: nada de pedido (ou cobranca) em dobro.
-            Pedido existente = pedidoRepository.buscarPorClienteEChave(clienteEmail, chave)
+            Pedido existente = pedidoRepository.buscarPorClienteEChave(clienteId, chave)
                     .orElseThrow(() -> e);
             return new ResultadoCriacao(existente, true);
         }
     }
 
-    public Pedido buscarPedido(Long id, String usuarioEmail, boolean funcionario) {
+    public Pedido buscarPedido(Long id, Long usuarioId, boolean funcionario) {
         Pedido pedido = pedidoRepository.buscarPorId(id)
                 .orElseThrow(() -> new NaoEncontradoException("Pedido nao encontrado"));
-        garantirAcesso(pedido, usuarioEmail, funcionario);
+        garantirAcesso(pedido, usuarioId, funcionario);
         return pedido;
     }
 
-    public List<Pedido> listarMeusPedidos(String clienteEmail) {
-        return pedidoRepository.listarPorCliente(clienteEmail);
+    public List<Pedido> listarMeusPedidos(Long clienteId) {
+        return pedidoRepository.listarPorCliente(clienteId);
     }
 
     // painel da cozinha / admin. status == null lista todos
@@ -151,20 +151,20 @@ public class PedidoService {
             garantirTransicao(pedido, StatusPedido.RETIRADO);
 
             Pedido retirado = pedidoRepository.salvar(pedido.comStatus(StatusPedido.RETIRADO));
-            eventPublisher.publicarPedidoFinalizado(montarEventoFinalizado(retirado));
+            eventPublisher.publicar(PedidoFinalizadoEvent.de(retirado));
             return retirado;
         });
     }
 
     // so da para cancelar enquanto a cozinha ainda nao comecou (status CRIADO)
-    public Pedido cancelarPedido(Long pedidoId, String usuarioEmail, boolean funcionario) {
+    public Pedido cancelarPedido(Long pedidoId, Long usuarioId, boolean funcionario) {
         return transacao.executar(() -> {
             Pedido pedido = buscarComLock(pedidoId);
-            garantirAcesso(pedido, usuarioEmail, funcionario);
+            garantirAcesso(pedido, usuarioId, funcionario);
             garantirTransicao(pedido, StatusPedido.CANCELADO);
 
             Pedido cancelado = pedidoRepository.salvar(pedido.comStatus(StatusPedido.CANCELADO));
-            eventPublisher.publicarPedidoCancelado(new PedidoCanceladoEvent(cancelado.id()));
+            eventPublisher.publicar(new PedidoCanceladoEvent(cancelado.id()));
             return cancelado;
         });
     }
@@ -214,8 +214,8 @@ public class PedidoService {
                 .orElseThrow(() -> new NaoEncontradoException("Pedido nao encontrado"));
     }
 
-    private void garantirAcesso(Pedido pedido, String usuarioEmail, boolean funcionario) {
-        if (!funcionario && !pedido.clienteEmail().equals(usuarioEmail)) {
+    private void garantirAcesso(Pedido pedido, Long usuarioId, boolean funcionario) {
+        if (!funcionario && !pedido.clienteId().equals(usuarioId)) {
             throw new AcessoNegadoException("Este pedido pertence a outro cliente");
         }
     }
@@ -227,21 +227,4 @@ public class PedidoService {
         }
     }
 
-    private PedidoCriadoEvent montarEventoCriado(Pedido pedido) {
-        List<PedidoCriadoEvent.Item> itens = pedido.itens().stream()
-                .map(i -> new PedidoCriadoEvent.Item(i.nomeProduto(), i.quantidade(), i.adicionais(), i.observacao()))
-                .toList();
-
-        return new PedidoCriadoEvent(pedido.id(), pedido.senhaRetirada(), pedido.clienteEmail(),
-                pedido.observacao(), pedido.criadoEm(), itens);
-    }
-
-    private PedidoFinalizadoEvent montarEventoFinalizado(Pedido pedido) {
-        List<PedidoFinalizadoEvent.Item> itens = pedido.itens().stream()
-                .map(i -> new PedidoFinalizadoEvent.Item(i.produtoId(), i.nomeProduto(), i.quantidade(), i.subtotal()))
-                .toList();
-
-        return new PedidoFinalizadoEvent(pedido.id(), pedido.clienteEmail(), pedido.total(),
-                pedido.formaPagamento().name(), LocalDateTime.now(), itens);
-    }
 }

@@ -32,7 +32,7 @@ public final class PedidoLogFormatter {
         StringBuilder sb = new StringBuilder();
         cabecalho(sb, "NOVO PEDIDO #" + evento.pedidoId(), "pedido-criado -> servicoCozinha", situacao);
         campo(sb, "Senha de retirada", evento.senhaRetirada());
-        campo(sb, "Cliente", evento.clienteEmail());
+        campo(sb, "Cliente", "#" + evento.clienteId());
         campo(sb, "Criado em", data(evento.criadoEm()));
         if (preenchido(evento.observacao())) {
             campo(sb, "Observacao", evento.observacao());
@@ -63,7 +63,7 @@ public final class PedidoLogFormatter {
     public static String finalizado(PedidoFinalizadoEvent evento, String situacao) {
         StringBuilder sb = new StringBuilder();
         cabecalho(sb, "PEDIDO FINALIZADO #" + evento.pedidoId(), "pedido-finalizado -> servicoRelatorio", situacao);
-        campo(sb, "Cliente", evento.clienteEmail());
+        campo(sb, "Cliente", "#" + evento.clienteId());
         campo(sb, "Pagamento", evento.formaPagamento());
         campo(sb, "Finalizado em", data(evento.finalizadoEm()));
         sb.append(LINHA_SIMPLES).append('\n');

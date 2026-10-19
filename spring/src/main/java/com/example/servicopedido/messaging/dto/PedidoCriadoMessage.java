@@ -7,7 +7,7 @@ import java.util.List;
 public record PedidoCriadoMessage(
         Long pedidoId,
         String senhaRetirada,
-        String clienteEmail,
+        Long clienteId,
         String observacao,
         LocalDateTime criadoEm,
         List<ItemMessage> itens

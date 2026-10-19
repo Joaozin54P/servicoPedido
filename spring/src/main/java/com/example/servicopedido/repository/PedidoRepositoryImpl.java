@@ -39,8 +39,8 @@ public class PedidoRepositoryImpl implements PedidoRepository {
     }
 
     @Override
-    public Optional<Pedido> buscarPorClienteEChave(String clienteEmail, String chaveIdempotencia) {
-        return repository.findByClienteEmailAndChaveIdempotencia(clienteEmail, chaveIdempotencia)
+    public Optional<Pedido> buscarPorClienteEChave(Long clienteId, String chaveIdempotencia) {
+        return repository.findByClienteIdAndChaveIdempotencia(clienteId, chaveIdempotencia)
                 .map(PedidoRepositoryAdapter::castOrm);
     }
 
@@ -64,8 +64,8 @@ public class PedidoRepositoryImpl implements PedidoRepository {
     }
 
     @Override
-    public List<Pedido> listarPorCliente(String clienteEmail) {
-        return repository.findByClienteEmailOrderByCriadoEmDesc(clienteEmail).stream()
+    public List<Pedido> listarPorCliente(Long clienteId) {
+        return repository.findByClienteIdOrderByCriadoEmDesc(clienteId).stream()
                 .map(PedidoRepositoryAdapter::castOrm)
                 .toList();
     }

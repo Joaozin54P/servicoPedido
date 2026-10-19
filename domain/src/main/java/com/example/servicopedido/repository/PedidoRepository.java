@@ -12,7 +12,7 @@ public interface PedidoRepository {
     Optional<Pedido> buscarPorId(Long id);
 
     // pedido que este cliente ja criou com esta Idempotency-Key (se houver)
-    Optional<Pedido> buscarPorClienteEChave(String clienteEmail, String chaveIdempotencia);
+    Optional<Pedido> buscarPorClienteEChave(Long clienteId, String chaveIdempotencia);
 
     // trava a linha do pedido ate o fim da transacao: evita, por exemplo,
     // o cliente cancelar no mesmo instante em que a cozinha comeca a preparar
@@ -22,5 +22,5 @@ public interface PedidoRepository {
 
     List<Pedido> listarPorStatus(StatusPedido status);
 
-    List<Pedido> listarPorCliente(String clienteEmail);
+    List<Pedido> listarPorCliente(Long clienteId);
 }

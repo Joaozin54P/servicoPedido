@@ -20,12 +20,12 @@ public interface PedidoRepositoryWithJpa extends JpaRepository<PedidoOrm, Long> 
     @Query("select p from PedidoOrm p where p.id = :id")
     Optional<PedidoOrm> buscarComLock(@Param("id") Long id);
 
-    Optional<PedidoOrm> findByClienteEmailAndChaveIdempotencia(String clienteEmail, String chaveIdempotencia);
+    Optional<PedidoOrm> findByClienteIdAndChaveIdempotencia(Long clienteId, String chaveIdempotencia);
 
     List<PedidoOrm> findAllByOrderByCriadoEmDesc();
 
     // fila da cozinha: mais antigos primeiro
     List<PedidoOrm> findByStatusOrderByCriadoEmAsc(StatusPedido status);
 
-    List<PedidoOrm> findByClienteEmailOrderByCriadoEmDesc(String clienteEmail);
+    List<PedidoOrm> findByClienteIdOrderByCriadoEmDesc(Long clienteId);
 }

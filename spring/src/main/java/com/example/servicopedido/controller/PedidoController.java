@@ -21,17 +21,33 @@ import com.example.servicopedido.controller.dto.request.AlterarStatusRequest;
 import com.example.servicopedido.controller.dto.request.CriarPedidoRequest;
 import com.example.servicopedido.controller.dto.response.PedidoResponse;
 import com.example.servicopedido.entity.StatusPedido;
-import com.example.servicopedido.service.PedidoService;
+import com.example.servicopedido.service.AtualizarStatusCozinhaService;
+import com.example.servicopedido.service.CancelarPedidoService;
+import com.example.servicopedido.service.ConsultarPedidoService;
+import com.example.servicopedido.service.CriarPedidoService;
 import com.example.servicopedido.service.ResultadoCriacao;
+import com.example.servicopedido.service.RetirarPedidoService;
 
 @RestController
 @RequestMapping("/pedidos")
 public class PedidoController {
 
-    private final PedidoService pedidoService;
+    private final CriarPedidoService criarPedido;
+    private final CancelarPedidoService cancelarPedido;
+    private final AtualizarStatusCozinhaService atualizarStatusCozinha;
+    private final RetirarPedidoService retirarPedido;
+    private final ConsultarPedidoService consultarPedido;
 
-    public PedidoController(PedidoService pedidoService) {
-        this.pedidoService = pedidoService;
+    public PedidoController(CriarPedidoService criarPedido,
+                            CancelarPedidoService cancelarPedido,
+                            AtualizarStatusCozinhaService atualizarStatusCozinha,
+                            RetirarPedidoService retirarPedido,
+                            ConsultarPedidoService consultarPedido) {
+        this.criarPedido = criarPedido;
+        this.cancelarPedido = cancelarPedido;
+        this.atualizarStatusCozinha = atualizarStatusCozinha;
+        this.retirarPedido = retirarPedido;
+        this.consultarPedido = consultarPedido;
     }
 
     // qualquer usuario logado. Exige o header Idempotency-Key (um UUID novo para cada pedido):
@@ -41,8 +57,8 @@ public class PedidoController {
     public ResponseEntity<PedidoResponse> criar(@RequestBody CriarPedidoRequest request,
                                                 @RequestHeader(value = "Idempotency-Key", required = false) String chave,
                                                 Authentication authentication) {
-        ResultadoCriacao resultado = pedidoService.criarPedido(
-                authentication.getName(),
+        ResultadoCriacao resultado = criarPedido.criar(
+                PedidoControllerAdapter.castUsuarioId(authentication),
                 chave,
                 PedidoControllerAdapter.castFormaPagamento(request.formaPagamento()),
                 request.observacao(),
@@ -55,7 +71,7 @@ public class PedidoController {
     // historico do proprio cliente
     @GetMapping("/meus")
     public List<PedidoResponse> meus(Authentication authentication) {
-        return pedidoService.listarMeusPedidos(authentication.getName()).stream()
+        return consultarPedido.listarDoCliente(PedidoControllerAdapter.castUsuarioId(authentication)).stream()
                 .map(PedidoControllerAdapter::castResponse)
                 .toList();
     }
@@ -64,13 +80,13 @@ public class PedidoController {
     @GetMapping("/{id}")
     public PedidoResponse buscar(@PathVariable Long id, Authentication authentication) {
         return PedidoControllerAdapter.castResponse(
-                pedidoService.buscarPedido(id, authentication.getName(), ehFuncionario(authentication)));
+                consultarPedido.buscar(id, PedidoControllerAdapter.castUsuarioId(authentication), ehFuncionario(authentication)));
     }
 
     // so COZINHA/ADMIN: GET /pedidos  ou  GET /pedidos?status=PRONTO
     @GetMapping
     public List<PedidoResponse> listar(@RequestParam(required = false) StatusPedido status) {
-        return pedidoService.listarPedidos(status).stream()
+        return consultarPedido.listar(status).stream()
                 .map(PedidoControllerAdapter::castResponse)
                 .toList();
     }
@@ -79,20 +95,20 @@ public class PedidoController {
     // E o mesmo efeito da mensagem na fila pedido-status-cozinha, mas por REST (serve para testar no Postman).
     @PatchMapping("/{id}/status")
     public PedidoResponse alterarStatus(@PathVariable Long id, @RequestBody AlterarStatusRequest request) {
-        return PedidoControllerAdapter.castResponse(pedidoService.atualizarStatusDaCozinha(
+        return PedidoControllerAdapter.castResponse(atualizarStatusCozinha.atualizar(
                 id, PedidoControllerAdapter.castStatus(request.status())));
     }
 
     // so COZINHA/ADMIN (atendente entrega o pedido PRONTO ao cliente)
     @PostMapping("/{id}/retirar")
     public PedidoResponse retirar(@PathVariable Long id) {
-        return PedidoControllerAdapter.castResponse(pedidoService.retirarPedido(id));
+        return PedidoControllerAdapter.castResponse(retirarPedido.retirar(id));
     }
 
     @PostMapping("/{id}/cancelar")
     public PedidoResponse cancelar(@PathVariable Long id, Authentication authentication) {
         return PedidoControllerAdapter.castResponse(
-                pedidoService.cancelarPedido(id, authentication.getName(), ehFuncionario(authentication)));
+                cancelarPedido.cancelar(id, PedidoControllerAdapter.castUsuarioId(authentication), ehFuncionario(authentication)));
     }
 
     private boolean ehFuncionario(Authentication authentication) {
